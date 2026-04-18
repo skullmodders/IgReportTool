@@ -190,6 +190,9 @@ def show_user_info(chat_id, target_id):
     wd_all = db_execute("SELECT COUNT(*) as cnt FROM withdrawals WHERE user_id=?", (target_id,), fetchone=True)
     wd_ok = db_execute("SELECT COUNT(*) as cnt FROM withdrawals WHERE user_id=? AND status='approved'", (target_id,), fetchone=True)
     task_done = db_execute("SELECT COUNT(*) as cnt FROM task_completions WHERE user_id=?", (target_id,), fetchone=True)
+    notes = get_user_notes(target_id, 3)
+    warnings = get_user_warnings(target_id, 3)
+    tier = get_user_tier(target_id)
     status = "🔴 Banned" if user["banned"] else "🟢 Active"
     is_adm = "👑 Yes" if is_admin(target_id) else "No"
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -226,7 +229,10 @@ def show_user_info(chat_id, target_id):
         f"{pe('info')} <b>ID:</b> <code>{target_id}</code>\n"
         f"<b>Status:</b> {status}\n"
         f"<b>Admin:</b> {is_adm}\n\n"
-        f"{pe('fly_money')} <b>Balance:</b> ₹{user['balance']:.2f}\n"
+        f"{pe('fly_money')} <b>Main Balance:</b> ₹{user['balance']:.2f}\n"
+        f"{pe('people')} <b>Referral Balance:</b> ₹{float(user['referral_balance'] or 0):.2f}\n"
+        f"{pe('party')} <b>Daily Bonus Balance:</b> ₹{float(user['daily_bonus_balance'] or 0):.2f}\n"
+        f"{pe('gift')} <b>Gift Balance:</b> ₹{float(user['gift_balance'] or 0):.2f}\n"
         f"{pe('chart_up')} <b>Total Earned:</b> ₹{user['total_earned']:.2f}\n"
         f"{pe('check')} <b>Withdrawn:</b> ₹{user['total_withdrawn']:.2f}\n"
         f"{pe('thumbs_up')} <b>Referrals:</b> {user['referral_count']}\n"
@@ -234,6 +240,10 @@ def show_user_info(chat_id, target_id):
         f"{pe('link')} <b>UPI:</b> {user['upi_id'] or 'Not set'}\n\n"
         f"{pe('task')} <b>Tasks Done:</b> {task_done['cnt'] if task_done else 0}\n"
         f"{pe('calendar')} <b>Joined:</b> {user['joined_at']}\n"
+        f"{pe('calendar')} <b>Last Active:</b> {user['last_active_at'] or user['joined_at']}\n"
+        f"{pe('bookmark')} <b>Tier:</b> {(tier['tier_name'] if tier else 'Standard')}\n"
+        f"{pe('warning')} <b>Warnings:</b> {len(warnings)} recent/active\n"
+        f"{pe('bookmark')} <b>Recent Note:</b> {((notes[0]['note'][:40] + '...') if notes else '-') }\n"
         f"{pe('chart')} <b>Withdrawals:</b> {wd_all['cnt']} ({wd_ok['cnt']} approved)\n"
         f"━━━━━━━━━━━━━━━━━━━━━━",
         reply_markup=markup
@@ -395,3 +405,68 @@ def smsg_cb(call):
     set_state(call.from_user.id, "admin_send_msg", {"target_id": tid})
     safe_send(call.message.chat.id, f"{pe('pencil')} Type message to send to <code>{tid}</code>:")
 
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("usr_note|"))
+def usr_note_cb(call):
+    if not is_admin(call.from_user.id):
+        return
+    try:
+        tid = int(call.data.split("|")[1])
+    except Exception:
+        return safe_answer(call, "Invalid user", True)
+    safe_answer(call)
+    set_state(call.from_user.id, "admin_add_user_note", {"target_id": tid})
+    safe_send(call.message.chat.id, f"{pe('pencil')} Send note for <code>{tid}</code>:")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("usr_warn|"))
+def usr_warn_cb(call):
+    if not is_admin(call.from_user.id):
+        return
+    try:
+        tid = int(call.data.split("|")[1])
+    except Exception:
+        return safe_answer(call, "Invalid user", True)
+    safe_answer(call)
+    set_state(call.from_user.id, "admin_add_user_warning", {"target_id": tid})
+    safe_send(call.message.chat.id, f"{pe('warning')} Send warning reason for <code>{tid}</code>:")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("usr_tier|"))
+def usr_tier_cb(call):
+    if not is_admin(call.from_user.id):
+        return
+    try:
+        tid = int(call.data.split("|")[1])
+    except Exception:
+        return safe_answer(call, "Invalid user", True)
+    safe_answer(call)
+    set_state(call.from_user.id, "admin_set_user_tier", {"target_id": tid})
+    safe_send(call.message.chat.id, f"{pe('bookmark')} Send tier in format: <code>Gold 3</code> for <code>{tid}</code>")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("usr_activity|"))
+def usr_activity_cb(call):
+    if not is_admin(call.from_user.id):
+        return
+    try:
+        tid = int(call.data.split("|")[1])
+    except Exception:
+        return safe_answer(call, "Invalid user", True)
+    safe_answer(call)
+    rows = get_user_activity(tid, 20)
+    notes = get_user_notes(tid, 5)
+    warnings = get_user_warnings(tid, 5)
+    out = [f"{pe('list')} <b>User Timeline</b> — <code>{tid}</code>", "━━━━━━━━━━━━━━━━━━━━━━", ""]
+    if notes:
+        out.append("<b>Recent Notes</b>")
+        out.extend([f"• {h(r['created_at'])} — {h(r['note'])[:70]}" for r in notes])
+        out.append("")
+    if warnings:
+        out.append("<b>Recent Warnings</b>")
+        out.extend([f"• {h(r['created_at'])} — {h(r['reason'])[:70]} ({h(r['status'])})" for r in warnings])
+        out.append("")
+    if rows:
+        out.append("<b>Recent Activity</b>")
+        out.extend([f"• {h(r['created_at'])} — {h(r['activity_type'])}: {h(r['details'])[:70]}" for r in rows])
+    else:
+        out.append("No activity logs yet.")
+    safe_send(call.message.chat.id, "\n".join(out)[:4000])

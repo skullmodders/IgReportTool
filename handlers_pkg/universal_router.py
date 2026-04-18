@@ -1,5 +1,5 @@
 from core import *
-from .basic_user import send_db, start_handler, balance_handler, refer_handler
+from .basic_user import send_db, start_handler, balance_handler, refer_handler, back_user_panel
 from .user_withdraw_gift import withdraw_handler, gift_handler
 from .user_tasks import tasks_handler
 from .admin_main import (
@@ -16,6 +16,7 @@ from .db_manager import (
 )
 from .admin_withdrawals import show_user_info
 from .admin_task_ops import process_task_rejection
+from .games import _show_games_home, mine_admin_entry, SOURCE_LABELS, SETTING_META_MAP
 
 # ======================== ADMIN PANEL BUTTON ========================
 @bot.message_handler(func=lambda m: m.text == "👑 Admin Panel" and is_admin(m.from_user.id))
@@ -60,7 +61,7 @@ def universal_handler(message):
         if text == "💰 Balance":
             balance_handler(message)
             return
-        if text == "👥 Refer":
+        if text in ["👥 Refer", "💸 Earn & Refer"]:
             refer_handler(message)
             return
         if text == "🏧 Withdraw":
@@ -104,6 +105,45 @@ def universal_handler(message):
             return
         if text == "👮 Admin Manager" and is_admin(user_id):
             admin_manager(message)
+            return
+        if text == "✨ Control Center" and is_admin(user_id):
+            from .admin_main import admin_control_center
+            admin_control_center(message)
+            return
+        if text == "🧰 User Tools" and is_admin(user_id):
+            from .admin_main import admin_user_tools
+            admin_user_tools(message)
+            return
+        if text == "🔎 User Search" and is_admin(user_id):
+            from .admin_main import admin_user_search_entry
+            admin_user_search_entry(message)
+            return
+        if text == "🧩 Feature Toggles" and is_admin(user_id):
+            from .admin_main import admin_feature_toggles
+            admin_feature_toggles(message)
+            return
+        if text == "📈 Reports" and is_admin(user_id):
+            from .admin_main import admin_reports
+            admin_reports(message)
+            return
+        if text == "🧾 Audit Logs" and is_admin(user_id):
+            from .admin_main import admin_audit_logs
+            admin_audit_logs(message)
+            return
+        if text == "📣 Announcements" and is_admin(user_id):
+            from .admin_main import admin_announcements
+            admin_announcements(message)
+            return
+        if text == "🗃 Backups" and is_admin(user_id):
+            from .admin_main import admin_backups
+            admin_backups(message)
+            return
+        if text == "🎮 Game Control" and is_admin(user_id):
+            mine_admin_entry(message)
+            return
+        if text == "ℹ️ Admin Guide" and is_admin(user_id):
+            from .admin_main import admin_guide_message
+            admin_guide_message(message)
             return
         if text == "🔙 User Panel" and is_admin(user_id):
             back_user_panel(message)
@@ -848,6 +888,651 @@ def universal_handler(message):
         set_setting('announcement_enabled', True)
         safe_send(message.chat.id, f"{pe('check')} Announcement updated.")
         return
+    if state == "mine_enter_mines":
+        try:
+            mines = int(text.strip())
+        except Exception:
+            safe_send(message.chat.id, f"{pe('cross')} Enter a valid mine count.")
+            return
+        min_mines = safe_int(get_setting("mine_min_mines"), 1)
+        max_mines = safe_int(get_setting("mine_max_mines"), max(1, safe_int(get_setting("mine_grid_size"), 5) ** 2 - 1))
+        if mines < min_mines or mines > max_mines:
+            safe_send(message.chat.id, f"{pe('cross')} Mine count must be between {min_mines} and {max_mines}.")
+            return
+        set_state(user_id, "mine_enter_bet", {"mines_count": mines})
+        safe_send(message.chat.id, f"{pe('money')} Enter bet amount between ₹{get_setting('mine_min_bet')} and ₹{get_setting('mine_max_bet')}.")
+        return
+
+    if state == "mine_enter_bet":
+        try:
+            bet = float(text.strip())
+        except Exception:
+            safe_send(message.chat.id, f"{pe('cross')} Enter a valid bet amount.")
+            return
+        min_bet = safe_float(get_setting("mine_min_bet"), 1)
+        max_bet = safe_float(get_setting("mine_max_bet"), 500)
+        if bet < min_bet or bet > max_bet:
+            safe_send(message.chat.id, f"{pe('cross')} Bet must be between ₹{min_bet:.2f} and ₹{max_bet:.2f}.")
+            return
+        data = get_state_data(user_id)
+        data["bet_amount"] = round(bet, 2)
+        set_state(user_id, "mine_choose_source", data)
+        user = get_user(user_id)
+        wallets = get_wallet_breakdown(user)
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for source in ["main", "referral", "daily_bonus", "gift"]:
+            markup.add(types.InlineKeyboardButton(f"{SOURCE_LABELS[source]} • ₹{wallets[source]:.2f}", callback_data=f"mine_source|{source}"))
+        safe_send(message.chat.id, f"{pe('wallet')} Choose balance source for ₹{bet:.2f} bet.", reply_markup=markup)
+        return
+
+    if state.startswith("mine_admin_setting|"):
+        key = state.split("|", 1)[1]
+        meta = SETTING_META_MAP.get(key)
+        if not meta:
+            clear_state(user_id)
+            return
+        raw = text.strip()
+        if meta["type"] == "user_list":
+            if raw.lower() in {"empty", "none", "clear"}:
+                value = []
+            else:
+                try:
+                    value = [int(x.strip()) for x in raw.replace(" ", "").split(",") if x.strip()]
+                except Exception:
+                    safe_send(message.chat.id, f"{pe('cross')} Send comma-separated user IDs or <code>empty</code>.")
+                    return
+        elif meta["type"] == "int":
+            try:
+                value = int(raw)
+            except Exception:
+                safe_send(message.chat.id, f"{pe('cross')} Enter a valid integer.")
+                return
+        elif meta["type"] == "text":
+            value = raw or "/mine"
+            if key == "mine_web_path":
+                if not value.startswith("/"):
+                    value = "/" + value
+                value = value.replace(" ", "")
+        else:
+            try:
+                value = float(raw)
+            except Exception:
+                safe_send(message.chat.id, f"{pe('cross')} Enter a valid number.")
+                return
+
+        if key == "mine_grid_size":
+            value = max(3, min(10, int(value)))
+            max_tiles = value * value - 1
+            current_min = max(1, min(safe_int(get_setting("mine_min_mines"), 1), max_tiles))
+            current_max = max(current_min, min(safe_int(get_setting("mine_max_mines"), max_tiles), max_tiles))
+            set_setting("mine_min_mines", current_min)
+            set_setting("mine_max_mines", current_max)
+        elif key == "mine_min_mines":
+            grid = max(3, min(10, safe_int(get_setting("mine_grid_size"), 5)))
+            value = max(1, min(int(value), grid * grid - 1))
+            if value > safe_int(get_setting("mine_max_mines"), grid * grid - 1):
+                set_setting("mine_max_mines", value)
+        elif key == "mine_max_mines":
+            grid = max(3, min(10, safe_int(get_setting("mine_grid_size"), 5)))
+            value = max(1, min(int(value), grid * grid - 1))
+            if value < safe_int(get_setting("mine_min_mines"), 1):
+                set_setting("mine_min_mines", value)
+        elif key == "mine_min_bet":
+            value = max(0.0, float(value))
+            if value > safe_float(get_setting("mine_max_bet"), value):
+                set_setting("mine_max_bet", value)
+        elif key == "mine_max_bet":
+            value = max(0.0, float(value))
+            if value < safe_float(get_setting("mine_min_bet"), value):
+                set_setting("mine_min_bet", value)
+        elif key == "games_access_min_referrals":
+            value = max(0, int(value))
+        elif key == "mine_global_win_rate":
+            value = max(0.0, min(100.0, float(value)))
+            set_setting("mine_global_loss_rate", round(100.0 - value, 2))
+        elif key == "mine_global_loss_rate":
+            value = max(0.0, min(100.0, float(value)))
+            set_setting("mine_global_win_rate", round(100.0 - value, 2))
+
+        clear_state(user_id)
+        set_setting(key, value)
+        safe_send(message.chat.id, f"{pe('check')} {meta['label']} updated to <code>{h(value)}</code>")
+        return
+
+    # ======= ADMIN TASK STATES =======
+    if state == "admin_task_create_title":
+        data = get_state_data(user_id)
+        data["title"] = text
+        set_state(user_id, "admin_task_create_desc", data)
+        safe_send(message.chat.id, f"{pe('pencil')} <b>Step 2/7: Description</b>\n\nEnter task description:")
+        return
+
+    if state == "admin_task_create_desc":
+        data = get_state_data(user_id)
+        data["description"] = text
+        set_state(user_id, "admin_task_create_reward", data)
+        safe_send(message.chat.id, f"{pe('pencil')} <b>Step 3/7: Reward Amount</b>\n\nEnter reward in ₹ (e.g. 5):")
+        return
+
+    if state == "admin_task_create_reward":
+        try:
+            reward = float(text)
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid number!")
+            return
+        data = get_state_data(user_id)
+        data["reward"] = reward
+        set_state(user_id, "admin_task_create_type", data)
+        markup = types.InlineKeyboardMarkup(row_width=3)
+        types_list = ["channel","youtube","instagram","twitter","facebook","website","app","survey","custom","video","follow"]
+        btns = [types.InlineKeyboardButton(f"{get_task_type_emoji(t)} {t.capitalize()}", callback_data=f"task_type_sel|{t}") for t in types_list]
+        for i in range(0, len(btns), 3):
+            markup.add(*btns[i:i+3])
+        safe_send(message.chat.id, f"{pe('pencil')} <b>Step 4/7: Task Type</b>\n\nSelect task type:", reply_markup=markup)
+        return
+
+    if state == "admin_task_create_url":
+        data = get_state_data(user_id)
+        data["task_url"] = text if text.lower() != "skip" else ""
+        set_state(user_id, "admin_task_create_channel", data)
+        safe_send(
+            message.chat.id,
+            f"{pe('pencil')} <b>Step 6/7: Channel Username</b>\n\n"
+            f"Enter channel username for auto-verify (e.g. @mychannel)\n"
+            f"Or type <code>skip</code> if not applicable:"
+        )
+        return
+
+    if state == "admin_task_create_channel":
+        data = get_state_data(user_id)
+        data["task_channel"] = text if text.lower() != "skip" else ""
+        set_state(user_id, "admin_task_create_maxcomp", data)
+        safe_send(
+            message.chat.id,
+            f"{pe('pencil')} <b>Step 7/7: Max Completions</b>\n\n"
+            f"Enter max users who can complete (0 = unlimited):"
+        )
+        return
+
+    if state == "admin_task_create_maxcomp":
+        try:
+            mc = int(text)
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid number!")
+            return
+        data = get_state_data(user_id)
+        data["max_completions"] = mc
+        clear_state(user_id)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        task_id = db_lastrowid(
+            "INSERT INTO tasks (title, description, reward, task_type, task_url, task_channel, "
+            "required_action, status, created_by, created_at, updated_at, max_completions, category) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                data.get("title",""), data.get("description",""),
+                data.get("reward",0), data.get("task_type","custom"),
+                data.get("task_url",""), data.get("task_channel",""),
+                "complete", "active", user_id, now, now,
+                mc, data.get("category","general")
+            )
+        )
+        log_admin_action(user_id, "create_task", f"Created task #{task_id}: {data.get('title','')}")
+        safe_send(
+            message.chat.id,
+            f"{pe('check')} <b>Task Created!</b> {pe('rocket')}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{pe('task')} <b>Title:</b> {data.get('title')}\n"
+            f"{pe('coins')} <b>Reward:</b> ₹{data.get('reward')}\n"
+            f"{pe('zap')} <b>Type:</b> {data.get('task_type','custom')}\n"
+            f"{pe('info')} <b>Task ID:</b> #{task_id}\n"
+            f"{pe('thumbs_up')} <b>Max Completions:</b> {'Unlimited' if mc == 0 else mc}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        return
+
+    if state == "admin_task_edit_field":
+        data = get_state_data(user_id)
+        task_id = data.get("task_id")
+        field = data.get("field")
+        clear_state(user_id)
+        if not task_id or not field:
+            return
+        val = text
+        if field == "reward":
+            try:
+                val = float(text)
+            except:
+                safe_send(message.chat.id, f"{pe('cross')} Invalid number!")
+                return
+        if field == "max_completions":
+            try:
+                val = int(text)
+            except:
+                safe_send(message.chat.id, f"{pe('cross')} Invalid number!")
+                return
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db_execute(f"UPDATE tasks SET {field}=?, updated_at=? WHERE id=?", (val, now, task_id))
+        safe_send(message.chat.id, f"{pe('check')} Task #{task_id} <b>{field}</b> updated to: <code>{val}</code>")
+        task = get_task(task_id)
+        if task:
+            show_admin_task_detail(message.chat.id, task)
+        return
+
+    if state == "admin_task_reject_reason":
+        data = get_state_data(user_id)
+        sub_id = data.get("sub_id")
+        clear_state(user_id)
+        if not sub_id:
+            return
+        process_task_rejection(message.chat.id, sub_id, text)
+        return
+
+    if state == "admin_task_bulk_reward":
+        data = get_state_data(user_id)
+        clear_state(user_id)
+        try:
+            amount = float(text)
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Invalid amount!")
+            return
+        users_list = db_execute("SELECT user_id FROM users WHERE banned=0", fetch=True) or []
+        count = 0
+        for u in users_list:
+            uu = get_user(u["user_id"])
+            if uu:
+                update_user(u["user_id"], balance=uu["balance"] + amount, total_earned=uu["total_earned"] + amount)
+                count += 1
+        log_admin_action(user_id, "bulk_reward", f"Sent ₹{amount} to {count} users")
+        safe_send(
+            message.chat.id,
+            f"{pe('check')} <b>Bulk Reward Sent!</b>\n\n"
+            f"{pe('coins')} ₹{amount} sent to {count} users!"
+        )
+        return
+
+    # ======= ADMIN MANAGER STATES =======
+    if state == "admin_add_new":
+        try:
+            tid = int(text.strip())
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid User ID!")
+            return
+        clear_state(user_id)
+        if int(tid) == int(ADMIN_ID):
+            safe_send(message.chat.id, f"{pe('info')} This is the main admin!")
+            return
+        target = get_user(tid)
+        fname = target["first_name"] if target else "Unknown"
+        uname = target["username"] if target else ""
+        add_admin(tid, uname, fname, user_id)
+        log_admin_action(user_id, "add_admin", f"Added admin {tid}")
+        safe_send(
+            message.chat.id,
+            f"{pe('check')} <b>Admin Added!</b>\n\n"
+            f"{pe('disguise')} Name: {fname}\n"
+            f"{pe('info')} ID: <code>{tid}</code>\n"
+            f"{pe('shield')} Permissions: All"
+        )
+        try:
+            safe_send(
+                tid,
+                f"{pe('crown')} <b>You are now an Admin!</b>\n\n"
+                f"{pe('info')} You have been granted admin access.\n"
+                f"{pe('shield')} Use /admin to access the admin panel."
+            )
+        except:
+            pass
+        return
+
+    if state == "admin_remove_admin":
+        try:
+            tid = int(text.strip())
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid User ID!")
+            return
+        clear_state(user_id)
+        if int(tid) == int(ADMIN_ID):
+            safe_send(message.chat.id, f"{pe('cross')} Cannot remove main admin!")
+            return
+        remove_admin(tid)
+        log_admin_action(user_id, "remove_admin", f"Removed admin {tid}")
+        safe_send(message.chat.id, f"{pe('check')} Admin <code>{tid}</code> removed!")
+        try:
+            safe_send(tid, f"{pe('warning')} Your admin access has been revoked.")
+        except:
+            pass
+        return
+
+    # ======= DB MANAGER STATES =======
+    if state == "db_add_user":
+        clear_state(user_id)
+        handle_db_add_user(message.chat.id, text)
+        return
+
+    if state == "db_edit_user":
+        clear_state(user_id)
+        handle_db_edit_user(message.chat.id, text)
+        return
+
+    if state == "db_add_withdrawal":
+        clear_state(user_id)
+        handle_db_add_withdrawal(message.chat.id, text)
+        return
+
+    if state == "db_edit_withdrawal":
+        clear_state(user_id)
+        handle_db_edit_withdrawal(message.chat.id, text)
+        return
+
+    if state == "db_add_gift":
+        clear_state(user_id)
+        handle_db_add_gift(message.chat.id, text)
+        return
+
+    if state == "db_add_task":
+        clear_state(user_id)
+        handle_db_add_task(message.chat.id, text)
+        return
+
+    if state == "db_raw_query":
+        clear_state(user_id)
+        handle_db_raw_query(message.chat.id, text)
+        return
+
+    if state == "db_search_user":
+        clear_state(user_id)
+        handle_db_search_user(message.chat.id, text)
+        return
+
+    if state == "db_delete_user":
+        clear_state(user_id)
+        handle_db_delete_user(message.chat.id, text)
+        return
+
+    if state == "db_delete_withdrawal":
+        clear_state(user_id)
+        handle_db_delete_withdrawal(message.chat.id, text)
+        return
+
+    if state == "db_edit_task_direct":
+        data = get_state_data(user_id)
+        clear_state(user_id)
+        handle_db_edit_task(message.chat.id, text, data)
+        return
+
+    if state == "db_add_task_completion":
+        clear_state(user_id)
+        handle_db_add_task_completion(message.chat.id, text)
+        return
+
+
+    # ======= ADMIN TASK STATES =======
+    if state == "admin_task_create_title":
+        data = get_state_data(user_id)
+        data["title"] = text
+        set_state(user_id, "admin_task_create_desc", data)
+        safe_send(message.chat.id, f"{pe('pencil')} <b>Step 2/7: Description</b>\n\nEnter task description:")
+        return
+
+    if state == "admin_task_create_desc":
+        data = get_state_data(user_id)
+        data["description"] = text
+        set_state(user_id, "admin_task_create_reward", data)
+        safe_send(message.chat.id, f"{pe('pencil')} <b>Step 3/7: Reward Amount</b>\n\nEnter reward in ₹ (e.g. 5):")
+        return
+
+    if state == "admin_task_create_reward":
+        try:
+            reward = float(text)
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid number!")
+            return
+        data = get_state_data(user_id)
+        data["reward"] = reward
+        set_state(user_id, "admin_task_create_type", data)
+        markup = types.InlineKeyboardMarkup(row_width=3)
+        types_list = ["channel","youtube","instagram","twitter","facebook","website","app","survey","custom","video","follow"]
+        btns = [types.InlineKeyboardButton(f"{get_task_type_emoji(t)} {t.capitalize()}", callback_data=f"task_type_sel|{t}") for t in types_list]
+        for i in range(0, len(btns), 3):
+            markup.add(*btns[i:i+3])
+        safe_send(message.chat.id, f"{pe('pencil')} <b>Step 4/7: Task Type</b>\n\nSelect task type:", reply_markup=markup)
+        return
+
+    if state == "admin_task_create_url":
+        data = get_state_data(user_id)
+        data["task_url"] = text if text.lower() != "skip" else ""
+        set_state(user_id, "admin_task_create_channel", data)
+        safe_send(
+            message.chat.id,
+            f"{pe('pencil')} <b>Step 6/7: Channel Username</b>\n\n"
+            f"Enter channel username for auto-verify (e.g. @mychannel)\n"
+            f"Or type <code>skip</code> if not applicable:"
+        )
+        return
+
+    if state == "admin_task_create_channel":
+        data = get_state_data(user_id)
+        data["task_channel"] = text if text.lower() != "skip" else ""
+        set_state(user_id, "admin_task_create_maxcomp", data)
+        safe_send(
+            message.chat.id,
+            f"{pe('pencil')} <b>Step 7/7: Max Completions</b>\n\n"
+            f"Enter max users who can complete (0 = unlimited):"
+        )
+        return
+
+    if state == "admin_task_create_maxcomp":
+        try:
+            mc = int(text)
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid number!")
+            return
+        data = get_state_data(user_id)
+        data["max_completions"] = mc
+        clear_state(user_id)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        task_id = db_lastrowid(
+            "INSERT INTO tasks (title, description, reward, task_type, task_url, task_channel, "
+            "required_action, status, created_by, created_at, updated_at, max_completions, category) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                data.get("title",""), data.get("description",""),
+                data.get("reward",0), data.get("task_type","custom"),
+                data.get("task_url",""), data.get("task_channel",""),
+                "complete", "active", user_id, now, now,
+                mc, data.get("category","general")
+            )
+        )
+        log_admin_action(user_id, "create_task", f"Created task #{task_id}: {data.get('title','')}")
+        safe_send(
+            message.chat.id,
+            f"{pe('check')} <b>Task Created!</b> {pe('rocket')}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{pe('task')} <b>Title:</b> {data.get('title')}\n"
+            f"{pe('coins')} <b>Reward:</b> ₹{data.get('reward')}\n"
+            f"{pe('zap')} <b>Type:</b> {data.get('task_type','custom')}\n"
+            f"{pe('info')} <b>Task ID:</b> #{task_id}\n"
+            f"{pe('thumbs_up')} <b>Max Completions:</b> {'Unlimited' if mc == 0 else mc}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        return
+
+    if state == "admin_task_edit_field":
+        data = get_state_data(user_id)
+        task_id = data.get("task_id")
+        field = data.get("field")
+        clear_state(user_id)
+        if not task_id or not field:
+            return
+        val = text
+        if field == "reward":
+            try:
+                val = float(text)
+            except:
+                safe_send(message.chat.id, f"{pe('cross')} Invalid number!")
+                return
+        if field == "max_completions":
+            try:
+                val = int(text)
+            except:
+                safe_send(message.chat.id, f"{pe('cross')} Invalid number!")
+                return
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db_execute(f"UPDATE tasks SET {field}=?, updated_at=? WHERE id=?", (val, now, task_id))
+        safe_send(message.chat.id, f"{pe('check')} Task #{task_id} <b>{field}</b> updated to: <code>{val}</code>")
+        task = get_task(task_id)
+        if task:
+            show_admin_task_detail(message.chat.id, task)
+        return
+
+    if state == "admin_task_reject_reason":
+        data = get_state_data(user_id)
+        sub_id = data.get("sub_id")
+        clear_state(user_id)
+        if not sub_id:
+            return
+        process_task_rejection(message.chat.id, sub_id, text)
+        return
+
+    if state == "admin_task_bulk_reward":
+        data = get_state_data(user_id)
+        clear_state(user_id)
+        try:
+            amount = float(text)
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Invalid amount!")
+            return
+        users_list = db_execute("SELECT user_id FROM users WHERE banned=0", fetch=True) or []
+        count = 0
+        for u in users_list:
+            uu = get_user(u["user_id"])
+            if uu:
+                update_user(u["user_id"], balance=uu["balance"] + amount, total_earned=uu["total_earned"] + amount)
+                count += 1
+        log_admin_action(user_id, "bulk_reward", f"Sent ₹{amount} to {count} users")
+        safe_send(
+            message.chat.id,
+            f"{pe('check')} <b>Bulk Reward Sent!</b>\n\n"
+            f"{pe('coins')} ₹{amount} sent to {count} users!"
+        )
+        return
+
+    # ======= ADMIN MANAGER STATES =======
+    if state == "admin_add_new":
+        try:
+            tid = int(text.strip())
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid User ID!")
+            return
+        clear_state(user_id)
+        if int(tid) == int(ADMIN_ID):
+            safe_send(message.chat.id, f"{pe('info')} This is the main admin!")
+            return
+        target = get_user(tid)
+        fname = target["first_name"] if target else "Unknown"
+        uname = target["username"] if target else ""
+        add_admin(tid, uname, fname, user_id)
+        log_admin_action(user_id, "add_admin", f"Added admin {tid}")
+        safe_send(
+            message.chat.id,
+            f"{pe('check')} <b>Admin Added!</b>\n\n"
+            f"{pe('disguise')} Name: {fname}\n"
+            f"{pe('info')} ID: <code>{tid}</code>\n"
+            f"{pe('shield')} Permissions: All"
+        )
+        try:
+            safe_send(
+                tid,
+                f"{pe('crown')} <b>You are now an Admin!</b>\n\n"
+                f"{pe('info')} You have been granted admin access.\n"
+                f"{pe('shield')} Use /admin to access the admin panel."
+            )
+        except:
+            pass
+        return
+
+    if state == "admin_remove_admin":
+        try:
+            tid = int(text.strip())
+        except:
+            safe_send(message.chat.id, f"{pe('cross')} Enter valid User ID!")
+            return
+        clear_state(user_id)
+        if int(tid) == int(ADMIN_ID):
+            safe_send(message.chat.id, f"{pe('cross')} Cannot remove main admin!")
+            return
+        remove_admin(tid)
+        log_admin_action(user_id, "remove_admin", f"Removed admin {tid}")
+        safe_send(message.chat.id, f"{pe('check')} Admin <code>{tid}</code> removed!")
+        try:
+            safe_send(tid, f"{pe('warning')} Your admin access has been revoked.")
+        except:
+            pass
+        return
+
+    # ======= DB MANAGER STATES =======
+    if state == "db_add_user":
+        clear_state(user_id)
+        handle_db_add_user(message.chat.id, text)
+        return
+
+    if state == "db_edit_user":
+        clear_state(user_id)
+        handle_db_edit_user(message.chat.id, text)
+        return
+
+    if state == "db_add_withdrawal":
+        clear_state(user_id)
+        handle_db_add_withdrawal(message.chat.id, text)
+        return
+
+    if state == "db_edit_withdrawal":
+        clear_state(user_id)
+        handle_db_edit_withdrawal(message.chat.id, text)
+        return
+
+    if state == "db_add_gift":
+        clear_state(user_id)
+        handle_db_add_gift(message.chat.id, text)
+        return
+
+    if state == "db_add_task":
+        clear_state(user_id)
+        handle_db_add_task(message.chat.id, text)
+        return
+
+    if state == "db_raw_query":
+        clear_state(user_id)
+        handle_db_raw_query(message.chat.id, text)
+        return
+
+    if state == "db_search_user":
+        clear_state(user_id)
+        handle_db_search_user(message.chat.id, text)
+        return
+
+    if state == "db_delete_user":
+        clear_state(user_id)
+        handle_db_delete_user(message.chat.id, text)
+        return
+
+    if state == "db_delete_withdrawal":
+        clear_state(user_id)
+        handle_db_delete_withdrawal(message.chat.id, text)
+        return
+
+    if state == "db_edit_task_direct":
+        data = get_state_data(user_id)
+        clear_state(user_id)
+        handle_db_edit_task(message.chat.id, text, data)
+        return
+
+    if state == "db_add_task_completion":
+        clear_state(user_id)
+        handle_db_add_task_completion(message.chat.id, text)
+        return
+
+
     if state == "admin_send_msg":
         data = get_state_data(user_id)
         tid = data.get("target_id")

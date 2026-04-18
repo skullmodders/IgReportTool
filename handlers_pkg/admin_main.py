@@ -1539,3 +1539,25 @@ def backup_actions(call):
     else:
         safe_answer(call)
     show_backups_panel(call.message.chat.id)
+
+
+@bot.message_handler(func=lambda m: m.text == "ℹ️ Admin Guide" and is_admin(m.from_user.id))
+def admin_guide_message(message):
+    guide = (
+        f"{pe('info')} <b>Admin Guide</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"✨ <b>Control Center</b> → quick access to core panels.\n"
+        f"👥 <b>All Users / User Search</b> → open any user profile.\n"
+        f"🧰 <b>User Tools</b> → notes, warnings, tiers, and activity.\n"
+        f"💳 <b>Withdrawals</b> → approve, reject, search, and review stats.\n"
+        f"⚙️ <b>Settings</b> → basic bot values and switches.\n"
+        f"🧠 <b>Advanced Settings</b> → referral, tax, inactivity, and safety controls.\n"
+        f"🎮 <b>Game Control</b> → Mine Game status, ratios, limits, and restrictions.\n"
+        f"📈 <b>Reports</b> → totals for balances, bonuses, withdrawals, and games.\n"
+        f"🧾 <b>Audit Logs</b> → admin actions and recent errors.\n"
+        f"📣 <b>Announcements</b> → send a notice to all users on open.\n"
+        f"🗃 <b>Backups</b> → create and review database backups.\n\n"
+        f"Tip: open a user with <b>🔎 User Search</b> for fast management.\n"
+        f"Tip: disabled features should now show a clear unavailable message instead of silent failure."
+    )
+    safe_send(message.chat.id, guide)

@@ -198,7 +198,7 @@ def refresh_balance(call):
     safe_answer(call, "✅ Refreshed!")
 
 # ======================== REFER ========================
-@bot.message_handler(func=lambda m: m.text == "👥 Refer")
+@bot.message_handler(func=lambda m: m.text in ["👥 Refer", "💸 Earn & Refer"])
 def refer_handler(message):
     user_id = message.from_user.id
     if not check_force_join(user_id):
@@ -233,6 +233,7 @@ def show_refer(chat_id, user_id, user):
         "📤 Share My Referral Link",
         url=f"https://t.me/share/url?url={refer_link}&text={share_msg}"
     ))
+    markup.add(types.InlineKeyboardButton("🎮 Open Games", callback_data="mine_refresh_home"))
     text = (
         f"{pe('fire')} <b>Refer & Earn</b> {pe('fly_money')}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
