@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#060612">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Verification · Secure</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --primary: #7c6dfa;
+            --primary-light: #a89df7;
+            --primary-dark: #5b4de8;
+            --success: #0dd9c5;
+            --success-dim: rgba(13,217,197,0.1);
+            --success-border: rgba(13,217,197,0.2);
+            --error: #ff5f7e;
+            --error-dim: rgba(255,95,126,0.1);
+            --error-border: rgba(255,95,126,0.2);
+            --info-dim: rgba(124,109,250,0.08);
+            --info-border: rgba(124,109,250,0.18);
+            --glass: rgba(255,255,255,0.04);
+            --glass-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+            --border-light: rgba(255,255,255,0.12);
+            --text-1: #f0eeff;
+            --text-2: rgba(240,238,255,0.55);
+            --text-3: rgba(240,238,255,0.28);
+            --bg: #060612;
+            --radius: 20px;
+            --radius-sm: 14px;
+            --ease: cubic-bezier(0.22,1,0.36,1);
+        }
+
+        *,*::before,*::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+
+        html {
+            height: -webkit-fill-available;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text-1);
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: fixed;
+            inset: 0;
+            -webkit-font-smoothing: antialiased;
+            padding: env(safe-area-inset-top,0) 16px env(safe-area-inset-bottom,0);
+            will-change: auto;
+        }
+
+        /* BG - CSS only, no canvas for performance */
+        .bg-orb {
+            position: fixed;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            filter: blur(80px);
+            will-change: transform;
+        }
+
+        .bg-orb-1 {
+            width: 50vw;
+            height: 50vw;
+            max-width: 320px;
+            max-height: 320px;
+            background: radial-gradient(circle, rgba(108,92,250,0.22) 0%, transparent 70%);
+            top: -10%;
+            left: -15%;
+            animation: orbFloat1 12s ease-in-out infinite;
+        }
+
+        .bg-orb-2 {
+            width: 45vw;
+            height: 45vw;
+            max-width: 280px;
+            max-height: 280px;
+            background: radial-gradient(circle, rgba(13,217,197,0.15) 0%, transparent 70%);
+            bottom: -10%;
+            right: -10%;
+            animation: orbFloat2 15s ease-in-out infinite;
+        }
+
+        .bg-orb-3 {
+            width: 35vw;
+            height: 35vw;
+            max-width: 220px;
+            max-height: 220px;
+            background: radial-gradient(circle, rgba(168,157,247,0.12) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: orbFloat3 10s ease-in-out infinite;
+        }
+
+        @keyframes orbFloat1 {
+            0%,100% { transform: translate(0,0); }
+            50% { transform: translate(20px, 30px); }
+        }
+
+        @keyframes orbFloat2 {
+            0%,100% { transform: translate(0,0); }
+            50% { transform: translate(-25px, -20px); }
+        }
+
+        @keyframes orbFloat3 {
+            0%,100% { transform: translate(-50%,-50%) scale(1); }
+            50% { transform: translate(-50%,-50%) scale(1.15); }
+        }
+
+        /* Grid - lightweight */
+        .grid-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(124,109,250,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(124,109,250,0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black, transparent 80%);
+            -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black, transparent 80%);
+        }
+
+        /* Scanline - optimized */
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(124,109,250,0.5), transparent);
+            z-index: 2;
+            pointer-events: none;
+            animation: scanMove 5s linear infinite;
+        }
+
+        @keyframes scanMove {
+            0% { top: 0; opacity: 0; }
+            3% { opacity: 0.8; }
+            97% { opacity: 0.3; }
+            100% { top: 100vh; opacity: 0; }
+        }
+
+        /* Toast */
+        .toast-host {
+            position: fixed;
+            top: calc(12px + env(safe-area-inset-top, 0px));
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: calc(100% - 32px);
+            max-width: 360px;
+            pointer-events: none;
+        }
+
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            border-radius: 14px;
+            background: rgba(16,14,34,0.95);
+            border: 1px solid rgba(255,255,255,0.09);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-1);
+            pointer-events: auto;
+            transform: translateY(0);
+            opacity: 1;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .toast.hiding {
+            opacity: 0;
+            transform: translateY(-12px);
+        }
+
+        .toast-ico svg {
+            width: 16px;
+            height: 16px;
+            display: block;
+            flex-shrink: 0;
+        }
+
+        /* WRAP */
+        .wrap {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 400px;
+            padding: 16px;
+        }
+
+        /* CARD */
+        .card {
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 26px;
+            padding: 32px 24px 28px;
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.03) inset,
+                0 24px 60px -16px rgba(0,0,0,0.55),
+                0 0 80px -30px rgba(124,109,250,0.12);
+            animation: cardIn 0.7s var(--ease) forwards;
+            opacity: 0;
+        }
+
+        @keyframes cardIn {
+            from { opacity:0; transform: translateY(20px) scale(0.98); }
+            to   { opacity:1; transform: translateY(0) scale(1); }
+        }
+
+        /* Top gradient line */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 12%;
+            right: 12%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(124,109,250,0.45), rgba(13,217,197,0.25), transparent);
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 26px;
+            animation: fadeDown 0.5s var(--ease) 0.1s both;
+        }
+
+        @keyframes fadeDown {
+            from { opacity:0; transform:translateY(-8px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 3px 12px rgba(124,109,250,0.3);
+            flex-shrink: 0;
+        }
+
+        .brand-icon svg {
+            width: 15px;
+            height: 15px;
+            color: #fff;
+        }
+
+        .brand-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-2);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .secure-badge {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: rgba(13,217,197,0.07);
+            border: 1px solid rgba(13,217,197,0.15);
+            border-radius: 100px;
+            font-size: 10.5px;
+            font-weight: 600;
+            color: var(--success);
+            letter-spacing: 0.2px;
+            flex-shrink: 0;
+        }
+
+        .secure-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%,100% { opacity:1; }
+            50% { opacity:0.25; }
+        }
+
+        /* ICON ZONE */
+        .icon-zone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 22px;
+            animation: iconIn 0.6s var(--ease) 0.2s both;
+        }
+
+        @keyframes iconIn {
+            from { opacity:0; transform: scale(0.75); }
+            to   { opacity:1; transform: scale(1); }
+        }
+
+        .icon-ring {
+            position: relative;
+            width: 82px;
+            height: 82px;
+            margin-bottom: 18px;
+            flex-shrink: 0;
+        }
+
+        .ring-svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .ring-rotate {
+            animation: ringRot 8s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes ringRot {
+            to { transform: rotate(360deg); }
+        }
+
+        .ring-rotate-rev {
+            animation: ringRot 12s linear infinite reverse;
+            transform-origin: center;
+        }
+
+        .icon-inner {
+            position: absolute;
+            inset: 11px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-pending {
+            background: radial-gradient(circle, rgba(124,109,250,0.15), rgba(124,109,250,0.04));
+            border: 1px solid rgba(124,109,250,0.2);
+            animation: pulseRing 3s ease-in-out infinite;
+        }
+
+        .icon-success {
+            background: radial-gradient(circle, rgba(13,217,197,0.15), rgba(13,217,197,0.04));
+            border: 1px solid rgba(13,217,197,0.2);
+        }
+
+        .icon-error {
+            background: radial-gradient(circle, rgba(255,95,126,0.15), rgba(255,95,126,0.04));
+            border: 1px solid rgba(255,95,126,0.2);
+        }
+
+        @keyframes pulseRing {
+            0%,100% { box-shadow: 0 0 0 0 rgba(124,109,250,0.12); }
+            50% { box-shadow: 0 0 0 10px rgba(124,109,250,0); }
+        }
+
+        .icon-inner svg {
+            width: 34px;
+            height: 34px;
+        }
+
+        .icon-pending svg { color: var(--primary-light); }
+        .icon-success svg { color: var(--success); }
+        .icon-error svg { color: var(--error); }
+
+        /* TITLE */
+        .title {
+            font-size: 21px;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: -0.4px;
+            line-height: 1.25;
+            margin-bottom: 8px;
+        }
+
+        .grad-default {
+            background: linear-gradient(135deg, #fff 40%, var(--primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .grad-success {
+            background: linear-gradient(135deg, #fff 40%, var(--success));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .grad-error {
+            background: linear-gradient(135deg, #fff 40%, var(--error));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: var(--text-2);
+            text-align: center;
+            line-height: 1.6;
+            max-width: 270px;
+            margin: 0 auto;
+        }
+
+        /* PROGRESS */
+        .progress-wrap {
+            margin: 20px 0;
+            animation: fadeUp 0.5s var(--ease) 0.35s both;
+        }
+
+        @keyframes fadeUp {
+            from { opacity:0; transform:translateY(8px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+
+        .progress-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10.5px;
+            color: var(--text-3);
+            margin-bottom: 7px;
+            letter-spacing: 0.2px;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 3px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 100px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 100px;
+            transition: width 1.2s var(--ease);
+            position: relative;
+        }
+
+        .pf-pending {
+            width: 42%;
+            background: linear-gradient(90deg, var(--primary-dark), var(--primary-light));
+            animation: shimmer 2s ease-in-out infinite;
+        }
+
+        .pf-success {
+            width: 100%;
+            background: linear-gradient(90deg, #00c9b8, var(--success));
+        }
+
+        .pf-error {
+            width: 100%;
+            background: linear-gradient(90deg, #c53060, var(--error));
+        }
+
+        @keyframes shimmer {
+            0%,100% { opacity:1; }
+            50% { opacity:0.5; }
+        }
+
+        /* INFO GRID */
+        .info-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-bottom: 18px;
+        }
+
+        .info-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 11px 14px;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            transition: background 0.2s ease;
+            animation: rowSlide 0.4s var(--ease) both;
+        }
+
+        .info-row:nth-child(1) { animation-delay: 0.4s; }
+        .info-row:nth-child(2) { animation-delay: 0.47s; }
+        .info-row:nth-child(3) { animation-delay: 0.54s; }
+        .info-row:nth-child(4) { animation-delay: 0.61s; }
+
+        @keyframes rowSlide {
+            from { opacity:0; transform:translateX(-8px); }
+            to   { opacity:1; transform:translateX(0); }
+        }
+
+        .info-label {
+            font-size: 10.5px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        .info-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-1);
+        }
+
+        .info-mono {
+            font-family: 'SF Mono', 'Menlo', 'Cascadia Code', monospace;
+            font-size: 12px;
+            letter-spacing: 0.6px;
+            color: var(--primary-light);
+        }
+
+        /* BADGE */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 100px;
+            font-size: 11.5px;
+            font-weight: 700;
+        }
+
+        .badge-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .badge-pending {
+            background: rgba(124,109,250,0.1);
+            border: 1px solid rgba(124,109,250,0.2);
+            color: var(--primary-light);
+        }
+
+        .badge-pending .badge-dot {
+            background: var(--primary-light);
+            animation: blink 1.4s ease-in-out infinite;
+        }
+
+        .badge-success {
+            background: var(--success-dim);
+            border: 1px solid var(--success-border);
+            color: var(--success);
+        }
+
+        .badge-success .badge-dot { background: var(--success); }
+
+        .badge-error {
+            background: var(--error-dim);
+            border: 1px solid var(--error-border);
+            color: var(--error);
+        }
+
+        .badge-error .badge-dot { background: var(--error); }
+
+        /* MSG BOX */
+        .msg-box {
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 12.5px;
+            line-height: 1.65;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 9px;
+            align-items: flex-start;
+            animation: fadeUp 0.4s var(--ease) 0.65s both;
+        }
+
+        .msg-icon { flex-shrink: 0; margin-top: 1px; }
+        .msg-icon svg { width: 15px; height: 15px; display: block; }
+
+        .msg-info {
+            background: var(--info-dim);
+            border: 1px solid var(--info-border);
+            color: rgba(168,157,247,0.9);
+        }
+
+        .msg-success {
+            background: var(--success-dim);
+            border: 1px solid var(--success-border);
+            color: rgba(13,217,197,0.88);
+        }
+
+        .msg-error {
+            background: var(--error-dim);
+            border: 1px solid var(--error-border);
+            color: rgba(255,95,126,0.88);
+        }
+
+        /* BUTTONS */
+        .btn-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            animation: fadeUp 0.4s var(--ease) 0.75s both;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px 22px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 14.5px;
+            font-weight: 700;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.18s var(--ease), box-shadow 0.18s ease, opacity 0.18s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            outline: none;
+            user-select: none;
+            -webkit-user-select: none;
+            letter-spacing: 0.1px;
+            touch-action: manipulation;
+        }
+
+        .btn:active {
+            transform: scale(0.97) !important;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary), #8b7cf8);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(124,109,250,0.32);
+        }
+
+        .btn-primary:active {
+            box-shadow: 0 2px 10px rgba(124,109,250,0.2);
+        }
+
+        .btn-success-cta {
+            background: linear-gradient(135deg, #00b4aa, var(--success), #55f0e0);
+            color: #021a18;
+            box-shadow: 0 4px 20px rgba(13,217,197,0.28);
+            font-weight: 800;
+        }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.04);
+            color: var(--text-2);
+            border: 1px solid var(--border);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #c53060, var(--error));
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(255,95,126,0.28);
+        }
+
+        /* Spinner */
+        .btn-spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: rgba(255,255,255,0.9);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .btn.loading .btn-text { opacity: 0; position: absolute; }
+        .btn.loading .btn-spinner { display: block; }
+        .btn.loading { pointer-events: none; opacity: 0.8; }
+
+        /* Ripple */
+        .ripple-el {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.18);
+            transform: scale(0);
+            animation: rippleAnim 0.5s linear;
+            pointer-events: none;
+        }
+
+        @keyframes rippleAnim {
+            to { transform: scale(4); opacity: 0; }
+        }
+
+        /* TIMER */
+        .timer-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 14px;
+            font-size: 11.5px;
+            color: var(--text-3);
+            animation: fadeUp 0.4s var(--ease) 0.85s both;
+        }
+
+        .timer-row svg {
+            width: 12px;
+            height: 12px;
+            opacity: 0.45;
+            flex-shrink: 0;
+        }
+
+        #timerVal {
+            font-family: 'SF Mono', monospace;
+            font-size: 11.5px;
+            color: var(--text-2);
+            letter-spacing: 1px;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.3s ease;
+        }
+
+        /* REDIRECT OVERLAY */
+        .redir-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(6,6,18,0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 18px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease, background 0.4s ease;
+        }
+
+        .redir-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+            background: rgba(6,6,18,0.88);
+        }
+
+        .redir-spinner {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 2.5px solid rgba(13,217,197,0.12);
+            border-top-color: var(--success);
+            animation: spin 0.85s linear infinite;
+        }
+
+        .redir-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-1);
+            text-align: center;
+        }
+
+        .redir-sub {
+            font-size: 12px;
+            color: var(--text-3);
+            text-align: center;
+            margin-top: 2px;
+        }
+
+        /* CONFETTI */
+        .confetti-wrap {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+            85% { opacity: 0.8; }
+            100% { transform: translateY(105vh) rotate(600deg); opacity: 0; }
+        }
+
+        /* FOOTER */
+        .footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 20px;
+            font-size: 10.5px;
+            color: var(--text-3);
+            animation: fadeUp 0.4s var(--ease) 0.95s both;
+        }
+
+        .footer svg {
+            width: 11px;
+            height: 11px;
+            opacity: 0.35;
+            flex-shrink: 0;
+        }
+
+        /* Stroke draw animation */
+        @keyframes strokeDraw {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Responsive */
+        @media (max-width: 360px) {
+            .card { padding: 26px 18px 22px; }
+            .title { font-size: 19px; }
+            .icon-ring { width: 72px; height: 72px; }
+        }
+
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .bg-orb, .scanline, .ring-rotate, .ring-rotate-rev,
+            .icon-pending, .secure-dot, .badge-dot, .pf-pending {
+                animation: none !important;
+            }
+            .card, .header, .icon-zone, .progress-wrap,
+            .info-row, .msg-box, .btn-stack, .timer-row, .footer {
+                animation: none !important;
+                opacity: 1 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Lightweight CSS orbs instead of canvas -->
+<div class="bg-orb bg-orb-1" aria-hidden="true"></div>
+<div class="bg-orb bg-orb-2" aria-hidden="true"></div>
+<div class="bg-orb bg-orb-3" aria-hidden="true"></div>
+<div class="grid-overlay" aria-hidden="true"></div>
+<div class="scanline" aria-hidden="true"></div>
+
+<!-- Toast host -->
+<div class="toast-host" id="toastHost" aria-live="polite" aria-atomic="false"></div>
+
+<!-- Confetti -->
+<div class="confetti-wrap" id="confettiWrap" aria-hidden="true"></div>
+
+<!-- Redirect overlay -->
+<div class="redir-overlay" id="redirOverlay" role="status" aria-label="Redirecting">
+    <div class="redir-spinner"></div>
+    <div>
+        <div class="redir-text">Redirecting you securely</div>
+        <div class="redir-sub" id="redirSub">Please wait…</div>
+    </div>
+</div>
+
+<!-- MAIN CARD -->
+<div class="wrap">
+    <div class="card" id="mainCard" role="main">
+
+        <!-- Header -->
+        <div class="header">
+            <div class="brand">
+                <div class="brand-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <span class="brand-name">SecureVerify</span>
+            </div>
+            <div class="secure-badge" aria-label="Connection encrypted">
+                <div class="secure-dot" aria-hidden="true"></div>
+                Encrypted
+            </div>
+        </div>
+
+        <!-- ══ SUCCESS ══ -->
+        {% if page_state == 'success' %}
+
+        <div class="icon-zone" aria-hidden="true">
+            <div class="icon-ring">
+                <svg class="ring-svg" viewBox="0 0 82 82" fill="none">
+                    <g class="ring-rotate">
+                        <circle cx="41" cy="41" r="39" stroke="url(#gs1)" stroke-width="1.2" stroke-dasharray="7 4" opacity="0.45"/>
+                    </g>
+                    <defs>
+                        <linearGradient id="gs1" x1="0" y1="0" x2="82" y2="82" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#0dd9c5"/>
+                            <stop offset="1" stop-color="#55f8e8" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="icon-inner icon-success">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="M9 12l2 2 4-4"
+                            stroke-dasharray="10"
+                            stroke-dashoffset="10"
+                            style="animation: strokeDraw 0.4s ease 0.5s forwards;"/>
+                    </svg>
+                </div>
+            </div>
+            <h1 class="title grad-success">Verification Complete</h1>
+            <p class="subtitle">Your identity is confirmed and secured. Welcome aboard.</p>
+        </div>
+
+        <div class="progress-wrap" aria-label="Progress: 100%">
+            <div class="progress-labels"><span>Progress</span><span>100%</span></div>
+            <div class="progress-track" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill pf-success"></div>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-row">
+                <span class="info-label">User ID</span>
+                <span class="info-value info-mono">{{ user_id }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Platform</span>
+                <span class="info-value">Telegram</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="badge badge-success">
+                    <span class="badge-dot" aria-hidden="true"></span>Verified
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Time</span>
+                <span class="info-value info-mono" id="tsVal">—</span>
+            </div>
+        </div>
+
+        <div class="msg-box msg-success" role="status">
+            <span class="msg-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/>
+                </svg>
+            </span>
+            <span>{{ message }}</span>
+        </div>
+
+        <div class="btn-stack">
+            <button class="btn btn-success-cta" id="btnContinue" onclick="handleContinue(this)">
+                <span class="btn-text">Continue to App</span>
+                <div class="btn-spinner" aria-hidden="true"></div>
+            </button>
+        </div>
+
+        <!-- ══ ERROR ══ -->
+        {% elif page_state == 'error' %}
+
+        <div class="icon-zone" aria-hidden="true">
+            <div class="icon-ring">
+                <svg class="ring-svg" viewBox="0 0 82 82" fill="none">
+                    <g class="ring-rotate-rev">
+                        <circle cx="41" cy="41" r="39" stroke="url(#ge1)" stroke-width="1.2" stroke-dasharray="7 4" opacity="0.45"/>
+                    </g>
+                    <defs>
+                        <linearGradient id="ge1" x1="0" y1="0" x2="82" y2="82" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#ff5f7e"/>
+                            <stop offset="1" stop-color="#ffb3c2" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="icon-inner icon-error">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10" opacity="0.3"/>
+                        <path d="M15 9l-6 6"
+                            stroke-dasharray="10"
+                            stroke-dashoffset="10"
+                            style="animation: strokeDraw 0.3s ease 0.4s forwards;"/>
+                        <path d="M9 9l6 6"
+                            stroke-dasharray="10"
+                            stroke-dashoffset="10"
+                            style="animation: strokeDraw 0.3s ease 0.6s forwards;"/>
+                    </svg>
+                </div>
+            </div>
+            <h1 class="title grad-error">Verification Failed</h1>
+            <p class="subtitle">We couldn't confirm your identity. Please try again.</p>
+        </div>
+
+        <div class="progress-wrap" aria-label="Progress: Failed">
+            <div class="progress-labels"><span>Progress</span><span>Failed</span></div>
+            <div class="progress-track" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill pf-error"></div>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-row">
+                <span class="info-label">User ID</span>
+                <span class="info-value info-mono">{{ user_id }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="badge badge-error">
+                    <span class="badge-dot" aria-hidden="true"></span>Failed
+                </span>
+            </div>
+        </div>
+
+        <div class="msg-box msg-error" role="alert">
+            <span class="msg-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+                </svg>
+            </span>
+            <span>{{ message }}</span>
+        </div>
+
+        <div class="btn-stack">
+            <button class="btn btn-danger" id="btnRetry" onclick="handleRetry(this)">
+                <span class="btn-text">Retry Verification</span>
+                <div class="btn-spinner" aria-hidden="true"></div>
+            </button>
+            <button class="btn btn-ghost" onclick="handleClose()">
+                <span class="btn-text">Dismiss</span>
+            </button>
+        </div>
+
+        <!-- ══ PENDING ══ -->
+        {% else %}
+
+        <div class="icon-zone" aria-hidden="true">
+            <div class="icon-ring">
+                <svg class="ring-svg" viewBox="0 0 82 82" fill="none">
+                    <g class="ring-rotate">
+                        <circle cx="41" cy="41" r="39" stroke="url(#gp1)" stroke-width="1.2" stroke-dasharray="7 4" opacity="0.55"/>
+                    </g>
+                    <defs>
+                        <linearGradient id="gp1" x1="0" y1="0" x2="82" y2="82" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#7c6dfa"/>
+                            <stop offset="1" stop-color="#a89df7" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="icon-inner icon-pending">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+            </div>
+            <h1 class="title grad-default">Identity Verification</h1>
+            <p class="subtitle">Confirm your identity to proceed. This session is fully encrypted and secure.</p>
+        </div>
+
+        <div class="progress-wrap" aria-label="Progress: Awaiting">
+            <div class="progress-labels"><span>Progress</span><span>Awaiting</span></div>
+            <div class="progress-track" role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill pf-pending"></div>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-row">
+                <span class="info-label">User ID</span>
+                <span class="info-value info-mono">{{ user_id }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Platform</span>
+                <span class="info-value">Telegram</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="badge badge-pending">
+                    <span class="badge-dot" aria-hidden="true"></span>Awaiting
+                </span>
+            </div>
+        </div>
+
+        <div class="msg-box msg-info" role="status">
+            <span class="msg-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/>
+                </svg>
+            </span>
+            <span>{{ message }}</span>
+        </div>
+
+        <div class="btn-stack">
+            <button class="btn btn-primary" id="btnVerify" onclick="handleVerify(this)">
+                <span class="btn-text">Verify Identity</span>
+                <div class="btn-spinner" aria-hidden="true"></div>
+            </button>
+            <button class="btn btn-ghost" onclick="handleClose()">
+                <span class="btn-text">Cancel</span>
+            </button>
+        </div>
+
+        <div class="timer-row" id="timerRow" aria-live="polite">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+            </svg>
+            Session expires in <span id="timerVal">05:00</span>
+        </div>
+
+        {% endif %}
+
+        <!-- Footer -->
+        <div class="footer" aria-label="Security information">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            End-to-end encrypted · Telegram SecureVerify
+        </div>
+
+    </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────
+   CORE INIT — runs immediately, no defer
+───────────────────────────────────────── */
+var TG = null;
+
+(function initTelegram() {
+    try {
+        TG = window.Telegram && window.Telegram.WebApp;
+        if (!TG) return;
+        TG.ready();
+        TG.expand();
+        if (typeof TG.requestFullscreen === 'function') {
+            try { TG.requestFullscreen(); } catch(e){}
+        }
+        if (typeof TG.disableVerticalSwipes === 'function') {
+            try { TG.disableVerticalSwipes(); } catch(e){}
+        }
+        if (typeof TG.setHeaderColor === 'function') {
+            try { TG.setHeaderColor('#060612'); } catch(e){}
+        }
+        if (typeof TG.setBackgroundColor === 'function') {
+            try { TG.setBackgroundColor('#060612'); } catch(e){}
+        }
+    } catch(e) {}
+})();
+
+/* ─────────────────────────────────────────
+   TIMESTAMP — set immediately
+───────────────────────────────────────── */
+(function() {
+    var el = document.getElementById('tsVal');
+    if (!el) return;
+    var d = new Date();
+    el.textContent =
+        String(d.getHours()).padStart(2,'0') + ':' +
+        String(d.getMinutes()).padStart(2,'0') + ':' +
+        String(d.getSeconds()).padStart(2,'0');
+})();
+
+/* ─────────────────────────────────────────
+   TOAST — lightweight, no library
+───────────────────────────────────────── */
+var _toastQueue = [];
+var _toastActive = 0;
+var MAX_TOASTS = 3;
+
+function toast(msg, type) {
+    if (_toastActive >= MAX_TOASTS) return;
+    var host = document.getElementById('toastHost');
+    if (!host) return;
+
+    var colors = {
+        success: { c:'#0dd9c5', d:'M8 12l3 3 5-5' },
+        error:   { c:'#ff5f7e', d:'M15 9l-6 6M9 9l6 6' },
+        info:    { c:'#a89df7', d:'M12 16v-4m0-4h.01' }
+    };
+    var cfg = colors[type] || colors.info;
+
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML =
+        '<span class="toast-ico"><svg viewBox="0 0 24 24" fill="none" stroke="' + cfg.c +
+        '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<circle cx="12" cy="12" r="10"/><path d="' + cfg.d + '"/></svg></span>' +
+        '<span>' + msg + '</span>';
+
+    host.appendChild(el);
+    _toastActive++;
+
+    var dismissed = false;
+    function dismiss() {
+        if (dismissed) return;
+        dismissed = true;
+        el.classList.add('hiding');
+        setTimeout(function() {
+            if (el.parentNode) el.parentNode.removeChild(el);
+            _toastActive = Math.max(0, _toastActive - 1);
+        }, 280);
+    }
+
+    var t = setTimeout(dismiss, 3000);
+    el.addEventListener('click', function() {
+        clearTimeout(t);
+        dismiss();
+    }, { once: true });
+}
+
+/* ─────────────────────────────────────────
+   RIPPLE — passive, no layout thrash
+───────────────────────────────────────── */
+document.addEventListener('pointerdown', function(e) {
+    var btn = e.target.closest && e.target.closest('.btn');
+    if (!btn || btn.classList.contains('loading')) return;
+    var r = btn.getBoundingClientRect();
+    var size = Math.max(r.width, r.height);
+    var rip = document.createElement('span');
+    rip.className = 'ripple-el';
+    rip.style.cssText =
+        'width:' + size + 'px;height:' + size + 'px;' +
+        'left:' + (e.clientX - r.left - size/2) + 'px;' +
+        'top:' + (e.clientY - r.top - size/2) + 'px;';
+    btn.appendChild(rip);
+    setTimeout(function() {
+        if (rip.parentNode) rip.parentNode.removeChild(rip);
+    }, 520);
+}, { passive: true });
+
+/* ─────────────────────────────────────────
+   TIMER — pending state only
+───────────────────────────────────────── */
+(function() {
+    var el = document.getElementById('timerVal');
+    if (!el) return;
+    var remaining = 300;
+    var iv = setInterval(function() {
+        remaining = Math.max(0, remaining - 1);
+        var m = Math.floor(remaining / 60);
+        var s = remaining % 60;
+        el.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+        if (remaining <= 60) el.style.color = '#ff5f7e';
+        if (remaining === 0) {
+            clearInterval(iv);
+            toast('Session expired. Please refresh.', 'error');
+        }
+    }, 1000);
+    // Cleanup if page unloads
+    window.addEventListener('pagehide', function() { clearInterval(iv); }, { once: true });
+})();
+
+/* ─────────────────────────────────────────
+   CONFETTI — batched, minimal DOM
+───────────────────────────────────────── */
+function fireConfetti() {
+    var wrap = document.getElementById('confettiWrap');
+    if (!wrap) return;
+    var colors = ['#7c6dfa','#0dd9c5','#a89df7','#55f8e8','#ffffff','#ff9fcf','#ffd700'];
+    var frag = document.createDocumentFragment();
+    var count = 35;
+
+    for (var i = 0; i < count; i++) {
+        var p = document.createElement('div');
+        var size = 5 + Math.random() * 7;
+        var dur = 1.8 + Math.random() * 2;
+        var delay = Math.random() * 0.6;
+        p.style.cssText =
+            'position:absolute;top:-10px;' +
+            'left:' + (Math.random() * 100) + '%;' +
+            'width:' + size + 'px;height:' + size + 'px;' +
+            'background:' + colors[Math.floor(Math.random() * colors.length)] + ';' +
+            'border-radius:' + (Math.random() > 0.4 ? '50%' : '2px') + ';' +
+            'animation:confettiFall ' + dur + 's ' + delay + 's linear forwards;' +
+            'will-change:transform;';
+        frag.appendChild(p);
+    }
+    wrap.appendChild(frag);
+
+    // Clean up after animation
+    setTimeout(function() {
+        wrap.innerHTML = '';
+    }, 4000);
+}
+
+/* ─────────────────────────────────────────
+   REDIRECT — clean, no flicker
+───────────────────────────────────────── */
+var _redirecting = false;
+
+function doRedirect(url, delayMs) {
+    if (_redirecting) return;
+    _redirecting = true;
+
+    var overlay = document.getElementById('redirOverlay');
+    var sub = document.getElementById('redirSub');
+
+    if (overlay) overlay.classList.add('show');
+
+    var secs = Math.ceil((delayMs || 1500) / 1000);
+    if (sub) sub.textContent = secs > 1 ? 'Closing in ' + secs + 's…' : 'Closing…';
+
+    if (secs > 1 && sub) {
+        var countdown = secs - 1;
+        var iv = setInterval(function() {
+            countdown--;
+            sub.textContent = countdown > 0 ? 'Closing in ' + countdown + 's…' : 'Closing…';
+            if (countdown <= 0) clearInterval(iv);
+        }, 1000);
+    }
+
+    setTimeout(function() {
+        // Try Telegram close first (cleanest)
+        if (TG && typeof TG.close === 'function') {
+            try { TG.close(); return; } catch(e){}
+        }
+        // Fallback: navigate
+        if (url && url !== '#' && url !== '') {
+            window.location.href = url;
+        } else {
+            // Last resort
+            try { window.close(); } catch(e){}
+        }
+    }, delayMs || 1500);
+}
+
+/* ─────────────────────────────────────────
+   BUTTON HANDLERS
+───────────────────────────────────────── */
+
+// Pending → Verify
+function handleVerify(btn) {
+    if (!btn || btn.classList.contains('loading')) return;
+    btn.classList.add('loading');
+    toast('Refreshing verification…', 'info');
+    setTimeout(function() {
+        window.location.reload();
+    }, 350);
+}
+
+// Success → Continue
+function handleContinue(btn) {
+    if (!btn || btn.classList.contains('loading')) return;
+    btn.classList.add('loading');
+    toast('Launching app…', 'success');
+    fireConfetti();
+
+    var redirectUrl = '{{ redirect_url if redirect_url else "" }}';
+    doRedirect(redirectUrl, 1500);
+}
+
+// Error → Retry
+function handleRetry(btn) {
+    if (!btn || btn.classList.contains('loading')) return;
+    btn.classList.add('loading');
+    toast('Retrying…', 'info');
+
+    setTimeout(function() {
+        btn.classList.remove('loading');
+        window.location.reload();
+    }, 2000);
+}
+
+// Close/Cancel
+function handleClose() {
+    if (TG && typeof TG.close === 'function') {
+        try { TG.close(); return; } catch(e){}
+    }
+    try { window.close(); } catch(e){}
+    toast('You can close this window manually.', 'info');
+}
+
+/* ─────────────────────────────────────────
+   ON LOAD — state-based init
+   Auto-redirect: 1-2s on success
+───────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function() {
+    var state = '{{ page_state | default("pending") }}';
+    var redirectUrl = '{{ redirect_url if redirect_url else "" }}';
+
+    // Small delay so card animation plays first
+    setTimeout(function() {
+        if (state === 'success') {
+            toast('Identity verified successfully!', 'success');
+            fireConfetti();
+            // Auto-redirect 1.5 seconds after toast shows
+            setTimeout(function() {
+                doRedirect(redirectUrl, 1500);
+            }, 600);
+
+        } else if (state === 'error') {
+            toast('Verification could not be completed.', 'error');
+
+        } else {
+            toast('Secure session started.', 'info');
+        }
+    }, 900);
+}, { once: true });
+
+/* ─────────────────────────────────────────
+   PREVENT UNWANTED INTERACTIONS
+───────────────────────────────────────── */
+document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+// Only prevent text selection on non-input elements
+document.addEventListener('selectstart', function(e) {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+    }
+});
+
+/* ─────────────────────────────────────────
+   VISIBILITY CHANGE — pause animations
+   when tab is hidden (battery saver)
+───────────────────────────────────────── */
+document.addEventListener('visibilitychange', function() {
+    var orbs = document.querySelectorAll('.bg-orb');
+    var paused = document.hidden ? 'paused' : 'running';
+    for (var i = 0; i < orbs.length; i++) {
+        orbs[i].style.animationPlayState = paused;
+    }
+});
+</script>
+</body>
+</html>
