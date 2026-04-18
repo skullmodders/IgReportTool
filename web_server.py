@@ -290,6 +290,7 @@ def home():
     return {
         "status": "running",
         "mine_url": get_public_mine_url(),
+        "configured_mine_path": _configured_mine_path(),
         "web_mine_enabled": bool(get_setting("mine_web_enabled")),
     }
 
@@ -314,12 +315,29 @@ def mine_page():
 
 
 
-CUSTOM_MINE_PATH = str(get_setting("mine_web_path") or "/mine").strip() or "/mine"
-if not CUSTOM_MINE_PATH.startswith("/"):
-    CUSTOM_MINE_PATH = "/" + CUSTOM_MINE_PATH
-if CUSTOM_MINE_PATH not in {"/mine", "/mine/", "/mine-game", "/games/mine", "/web/mine"}:
-    app.add_url_rule(CUSTOM_MINE_PATH, endpoint="mine_page_custom", view_func=mine_page)
-    app.add_url_rule(CUSTOM_MINE_PATH.rstrip('/') + '/', endpoint="mine_page_custom_slash", view_func=mine_page)
+
+@app.route('/favicon.ico')
+def favicon_ok():
+    return ('', 204)
+
+
+def _configured_mine_path():
+    path = str(get_setting('mine_web_path') or '/mine').strip() or '/mine'
+    if not path.startswith('/'):
+        path = '/' + path
+    return path
+
+
+def _register_configured_mine_alias():
+    path = _configured_mine_path()
+    endpoint = 'mine_page_dynamic_alias'
+    if path not in {rule.rule for rule in app.url_map.iter_rules()}:
+        app.add_url_rule(path, endpoint, mine_page)
+        if not path.endswith('/'):
+            app.add_url_rule(path + '/', endpoint + '_slash', mine_page)
+
+
+_register_configured_mine_alias()
 
 @app.get("/api/mine/bootstrap")
 def mine_bootstrap():
@@ -411,14 +429,10 @@ def mine_pick():
     safe_target = max(0, safe_int(session["safe_target"]))
     safe_tiles = max(1, total_tiles - safe_int(session["mines_count"]))
     force_first = bool(session["first_pick_safe"]) and gems_found == 0 and bool(get_setting("mine_force_safe_first_tile"))
-    locked_state = board[idx] if idx < len(board) else "hidden"
-    if locked_state in {"gem", "mine"}:
-        should_be_gem = locked_state == "gem"
-    else:
-        should_be_gem = force_first or gems_found < safe_target
-        if safe_int(session["mines_count"]) >= total_tiles:
-            should_be_gem = False
-        board[idx] = "gem" if should_be_gem else "mine"
+    should_be_gem = force_first or gems_found < safe_target
+    if safe_int(session["mines_count"]) >= total_tiles:
+        should_be_gem = False
+    board[idx] = "gem" if should_be_gem else "mine"
     revealed.append(idx)
     now = _now_str()
     if should_be_gem:

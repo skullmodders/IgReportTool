@@ -127,6 +127,7 @@ DEFAULT_SETTINGS = {
     "mine_risk_indicator_enabled": True,
     "mine_auto_cash_out_enabled": False,
     "mine_force_safe_first_tile": True,
+    "mine_web_path": "/mine",
 }
 
 PE = {
@@ -1383,6 +1384,7 @@ def get_main_keyboard(user_id=None):
         types.KeyboardButton("💰 Balance"),
         types.KeyboardButton("💸 Earn & Refer"),
     )
+    markup.add(types.KeyboardButton("🎮 Games"))
     markup.add(
         types.KeyboardButton("🏧 Withdraw"),
         types.KeyboardButton("🎁 Gift"),
@@ -1662,10 +1664,10 @@ def get_public_mine_url(user_id=None):
     base = normalize_public_base_url(PUBLIC_BASE_URL)
     if not base:
         return ""
-    raw_path = str(get_setting("mine_web_path") or "/mine").strip() or "/mine"
-    if not raw_path.startswith("/"):
-        raw_path = "/" + raw_path
-    url = f"{base}{raw_path}"
+    mine_path = str(get_setting("mine_web_path") or "/mine").strip() or "/mine"
+    if not mine_path.startswith("/"):
+        mine_path = "/" + mine_path
+    url = f"{base}{mine_path}"
     if user_id is not None:
         try:
             url += f"?uid={safe_int(user_id)}"
