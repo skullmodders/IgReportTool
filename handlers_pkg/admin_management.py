@@ -25,7 +25,6 @@ def show_admin_manager(chat_id):
     )
     markup.add(
         types.InlineKeyboardButton("📊 Admin Stats", callback_data="am_stats"),
-        types.InlineKeyboardButton("🔐 Roles & Permissions", callback_data="am_roles"),
     )
     safe_send(
         chat_id,
@@ -158,42 +157,3 @@ def am_stats(call):
     safe_send(call.message.chat.id, text)
 
 
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "am_roles")
-def am_roles(call):
-    if not is_super_admin(call.from_user.id):
-        safe_answer(call, "Only main admin!", True)
-        return
-    admins = get_all_admins()
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    for adm in admins:
-        if int(adm['user_id']) == int(ADMIN_ID):
-            continue
-        role = adm['role'] if 'role' in adm.keys() else 'manager'
-        markup.add(types.InlineKeyboardButton(f"{adm['first_name'] or adm['user_id']} • {role}", callback_data=f"am_set_role|{adm['user_id']}"))
-    safe_answer(call)
-    safe_send(call.message.chat.id, f"{pe('shield')} <b>Roles & Permissions</b>\nSelect an admin to change role.", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("am_set_role|"))
-def am_set_role(call):
-    if not is_super_admin(call.from_user.id):
-        safe_answer(call, "Only main admin!", True)
-        return
-    tid = int(call.data.split('|')[1])
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    for role in ['support','finance','manager']:
-        markup.add(types.InlineKeyboardButton(role.title(), callback_data=f"am_apply_role|{tid}|{role}"))
-    safe_answer(call)
-    safe_send(call.message.chat.id, f"Choose role for <code>{tid}</code>", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("am_apply_role|"))
-def am_apply_role(call):
-    if not is_super_admin(call.from_user.id):
-        safe_answer(call, "Only main admin!", True)
-        return
-    _, tid, role = call.data.split('|', 2)
-    set_admin_role(int(tid), role)
-    log_admin_action(call.from_user.id, 'set_admin_role', f'{tid} => {role}')
-    safe_answer(call, 'Role updated')
-    safe_send(call.message.chat.id, f"{pe('check')} Admin <code>{tid}</code> role set to <b>{role}</b>.")
