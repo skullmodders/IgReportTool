@@ -263,13 +263,15 @@ def _show_games_home(chat_id, user_id):
     eligible = refs >= min_refs
     markup = types.InlineKeyboardMarkup(row_width=1)
     public_web_url = get_public_mine_url(user_id)
-    if bool(get_setting("mine_telegram_enabled")) and bool(get_setting("mine_game_enabled")) and eligible:
+    telegram_ready = bool(get_setting("mine_telegram_enabled")) and bool(get_setting("mine_game_enabled"))
+    web_ready = bool(get_setting("mine_web_enabled")) and bool(get_setting("mine_game_enabled")) and bool(public_web_url)
+    if eligible and telegram_ready:
         markup.add(types.InlineKeyboardButton("💣 Play Mine Game", callback_data="mine_open"))
-    if public_web_url and bool(get_setting("mine_web_enabled")) and bool(get_setting("mine_game_enabled")) and eligible:
+    if eligible and web_ready:
         markup.add(types.InlineKeyboardButton("🌐 Open Web Mine", web_app=WebAppInfo(url=public_web_url)))
-    elif not eligible:
+    if not eligible:
         markup.add(types.InlineKeyboardButton("🔒 Unlock Games", callback_data="mine_need_referrals"))
-    else:
+    if eligible and not telegram_ready and not web_ready:
         markup.add(types.InlineKeyboardButton("⚠️ Mine Game Unavailable", callback_data="mine_disabled_notice"))
     markup.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="mine_refresh_home"))
     text = (
@@ -437,10 +439,14 @@ def mine_pick(call):
     safe_target = max(0, safe_int(session["safe_target"]))
     safe_tiles = max(1, total_tiles - safe_int(session["mines_count"]))
     force_first = bool(session["first_pick_safe"]) and gems_found == 0 and bool(get_setting("mine_force_safe_first_tile"))
-    should_be_gem = force_first or gems_found < safe_target
-    if safe_int(session["mines_count"]) >= total_tiles:
-        should_be_gem = False
-    board[idx] = "gem" if should_be_gem else "mine"
+    locked_state = board[idx] if idx < len(board) else "hidden"
+    if locked_state in {"gem", "mine"}:
+        should_be_gem = locked_state == "gem"
+    else:
+        should_be_gem = force_first or gems_found < safe_target
+        if safe_int(session["mines_count"]) >= total_tiles:
+            should_be_gem = False
+        board[idx] = "gem" if should_be_gem else "mine"
     revealed.append(idx)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if should_be_gem:
@@ -542,6 +548,50 @@ def _mine_admin_value(key):
     if isinstance(val, bool):
         return "ON" if val else "OFF"
     return str(val)
+
+
+def _mine_board_text(session):
+    board = safe_json(session.get("board_json"), [])
+    size = max(3, safe_int(session.get("grid_size"), 5))
+    total = size * size
+    if len(board) < total:
+        board.extend(["hidden"] * (total - len(board)))
+    out = []
+    mines = []
+    for r in range(size):
+        row = []
+        for c in range(size):
+            idx = r * size + c
+            state = board[idx]
+            if state == "mine":
+                row.append("💣")
+                mines.append(idx)
+            elif state == "gem":
+                row.append("💎")
+            else:
+                row.append("❔")
+        out.append(" ".join(row))
+    mine_text = ", ".join(str(i) for i in mines) if mines else "Not locked yet / hidden logic"
+    grid = "\n".join(out)
+    return (
+        f"🎯 <b>Session #{session['id']} Board View</b>\n"
+        f"User: <code>{session['user_id']}</code> | Status: <b>{h(str(session['status']))}</b>\n"
+        f"Bet: ₹{safe_float(session['bet_amount']):.2f} | Mines: {safe_int(session['mines_count'])} | Gems: {safe_int(session['gems_found'])}\n"
+        f"Safe Target: {safe_int(session.get('safe_target'))} | Mode: <b>{h(str(session.get('outcome_mode') or 'normal'))}</b>\n\n"
+        f"{grid}\n\n"
+        f"💣 <b>Mine Indexes:</b> <code>{h(mine_text)}</code>\n"
+        f"✍️ To edit an active board, tap the edit button and send indexes like <code>0,4,7</code>."
+    )
+
+
+def _mine_board_markup(session_id, back='mineadm_active'):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("👁 View Board", callback_data=f"mineadm_board|{session_id}"),
+        types.InlineKeyboardButton("✍️ Edit Mines", callback_data=f"mineadm_editboard|{session_id}"),
+    )
+    markup.add(types.InlineKeyboardButton("⬅️ Back", callback_data=back))
+    return markup
 
 
 def _mine_admin_buttons(keys, back="mineadm_home"):
@@ -805,3 +855,36 @@ def mineadm_active(call):
             f"Mode: {row['outcome_mode']} | Safe Target: {safe_int(row['safe_target'])} | {row['created_at'][:16]}\n\n"
         )
     safe_send(call.message.chat.id, text[:4000])
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("mineadm_board|"))
+def mineadm_board(call):
+    if not is_admin(call.from_user.id):
+        return
+    safe_answer(call)
+    try:
+        _, session_id = call.data.split("|", 1)
+    except ValueError:
+        return
+    session = db_execute("SELECT * FROM mine_game_sessions WHERE id=?", (safe_int(session_id),), fetchone=True)
+    if not session:
+        safe_send(call.message.chat.id, f"{pe('warning')} Session not found.")
+        return
+    safe_send(call.message.chat.id, _mine_board_text(session), reply_markup=_mine_board_markup(session['id']))
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("mineadm_editboard|"))
+def mineadm_editboard(call):
+    if not is_admin(call.from_user.id):
+        return
+    safe_answer(call)
+    try:
+        _, session_id = call.data.split("|", 1)
+    except ValueError:
+        return
+    session = db_execute("SELECT * FROM mine_game_sessions WHERE id=?", (safe_int(session_id),), fetchone=True)
+    if not session:
+        safe_send(call.message.chat.id, f"{pe('warning')} Session not found.")
+        return
+    set_state(call.from_user.id, f"mine_admin_edit_board|{safe_int(session_id)}")
+    safe_send(call.message.chat.id, _mine_board_text(session) + "\n\nSend the new mine indexes now. Example: <code>0,4,7,9</code>")

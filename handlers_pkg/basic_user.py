@@ -234,6 +234,8 @@ def show_refer(chat_id, user_id, user):
         url=f"https://t.me/share/url?url={refer_link}&text={share_msg}"
     ))
     markup.add(types.InlineKeyboardButton("🎮 Open Games", callback_data="mine_refresh_home"))
+    if bool(get_setting("games_section_enabled")) and bool(get_setting("mine_game_enabled")) and bool(get_setting("mine_telegram_enabled")):
+        markup.add(types.InlineKeyboardButton("💣 Play Mine Game", callback_data="mine_open"))
     web_mine_url = get_public_mine_url(user_id)
     if web_mine_url and bool(get_setting("mine_web_enabled")) and bool(get_setting("mine_game_enabled")):
         markup.add(types.InlineKeyboardButton("🌐 Open Web Mine", web_app=WebAppInfo(url=web_mine_url)))

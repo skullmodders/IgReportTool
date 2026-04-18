@@ -925,6 +925,55 @@ def universal_handler(message):
         safe_send(message.chat.id, f"{pe('wallet')} Choose balance source for ₹{bet:.2f} bet.", reply_markup=markup)
         return
 
+    if state.startswith("mine_admin_edit_board|"):
+        try:
+            session_id = int(state.split("|", 1)[1])
+        except Exception:
+            clear_state(user_id)
+            return
+        raw = text.strip()
+        if raw.lower() in {"cancel", "clear", "none"}:
+            clear_state(user_id)
+            safe_send(message.chat.id, f"{pe('check')} Board edit cancelled.")
+            return
+        session = db_execute("SELECT * FROM mine_game_sessions WHERE id=?", (session_id,), fetchone=True)
+        if not session:
+            clear_state(user_id)
+            safe_send(message.chat.id, f"{pe('cross')} Session not found.")
+            return
+        size = max(3, safe_int(session['grid_size'], 5))
+        total = size * size
+        mines_required = max(1, safe_int(session['mines_count'], 1))
+        try:
+            mine_indexes = [int(x.strip()) for x in raw.replace(' ', '').split(',') if x.strip()]
+        except Exception:
+            safe_send(message.chat.id, f"{pe('cross')} Send comma-separated tile indexes like <code>0,4,7</code>.")
+            return
+        if len(set(mine_indexes)) != len(mine_indexes):
+            safe_send(message.chat.id, f"{pe('cross')} Duplicate indexes are not allowed.")
+            return
+        if len(mine_indexes) != mines_required:
+            safe_send(message.chat.id, f"{pe('cross')} You must send exactly <b>{mines_required}</b> mine indexes for this session.")
+            return
+        if any(i < 0 or i >= total for i in mine_indexes):
+            safe_send(message.chat.id, f"{pe('cross')} Every index must be between 0 and {total - 1}.")
+            return
+        board = ['gem'] * total
+        for idx in mine_indexes:
+            board[idx] = 'mine'
+        revealed = safe_json(session['revealed_json'], [])
+        for idx in revealed:
+            if 0 <= idx < total and board[idx] == 'mine':
+                safe_send(message.chat.id, f"{pe('cross')} You cannot place a mine on an already revealed safe tile.")
+                return
+        db_execute(
+            "UPDATE mine_game_sessions SET board_json=?, safe_target=?, outcome_mode=?, updated_at=? WHERE id=?",
+            (json.dumps(board), max(0, total - len(mine_indexes)), 'manual_board', datetime.now().strftime('%Y-%m-%d %H:%M:%S'), session_id)
+        )
+        clear_state(user_id)
+        safe_send(message.chat.id, f"{pe('check')} Session #{session_id} board updated successfully.\nMine indexes: <code>{h(','.join(str(x) for x in mine_indexes))}</code>")
+        return
+
     if state.startswith("mine_admin_setting|"):
         key = state.split("|", 1)[1]
         meta = SETTING_META_MAP.get(key)

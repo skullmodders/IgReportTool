@@ -1662,7 +1662,10 @@ def get_public_mine_url(user_id=None):
     base = normalize_public_base_url(PUBLIC_BASE_URL)
     if not base:
         return ""
-    url = f"{base}/mine"
+    raw_path = str(get_setting("mine_web_path") or "/mine").strip() or "/mine"
+    if not raw_path.startswith("/"):
+        raw_path = "/" + raw_path
+    url = f"{base}{raw_path}"
     if user_id is not None:
         try:
             url += f"?uid={safe_int(user_id)}"
