@@ -12,6 +12,7 @@ SETTING_META = [
     ("games_access_min_referrals", "int", "Minimum Referrals To Play"),
     ("mine_game_enabled", "toggle", "Mine Game ON/OFF"),
     ("mine_telegram_enabled", "toggle", "Telegram Mode"),
+    ("mine_web_enabled", "toggle", "Web App Mode"),
     ("mine_global_win_rate", "number", "Win Ratio %"),
     ("mine_global_loss_rate", "number", "Loss Ratio %"),
     ("mine_force_win_all", "toggle", "Force Win All"),
@@ -261,8 +262,11 @@ def _show_games_home(chat_id, user_id):
     refs = safe_int(user["referral_count"])
     eligible = refs >= min_refs
     markup = types.InlineKeyboardMarkup(row_width=1)
+    public_web_url = get_public_mine_url(user_id)
     if bool(get_setting("mine_telegram_enabled")) and bool(get_setting("mine_game_enabled")) and eligible:
         markup.add(types.InlineKeyboardButton("💣 Play Mine Game", callback_data="mine_open"))
+    if public_web_url and bool(get_setting("mine_web_enabled")) and bool(get_setting("mine_game_enabled")) and eligible:
+        markup.add(types.InlineKeyboardButton("🌐 Open Web Mine", web_app=WebAppInfo(url=public_web_url)))
     elif not eligible:
         markup.add(types.InlineKeyboardButton("🔒 Unlock Games", callback_data="mine_need_referrals"))
     else:
@@ -280,8 +284,9 @@ def _show_games_home(chat_id, user_id):
         f"{pe('check')} <b>Access:</b> {'Unlocked' if eligible else 'Locked'}\n\n"
         f"Games Section: <b>{'ON' if _games_enabled() else 'OFF'}</b>\n"
         f"Mine Game: <b>{'ON' if bool(get_setting('mine_game_enabled')) else 'OFF'}</b>\n"
-        f"Telegram Mode: <b>{'ON' if bool(get_setting('mine_telegram_enabled')) else 'OFF'}</b>\n\n"
-        f"{pe('diamond')} Open Mine Game from here using your real wallet balances inside Telegram."
+        f"Telegram Mode: <b>{'ON' if bool(get_setting('mine_telegram_enabled')) else 'OFF'}</b>\n"
+        f"Web App Mode: <b>{'ON' if bool(get_setting('mine_web_enabled')) else 'OFF'}</b>\n\n"
+        f"{pe('diamond')} Play Mine Game using your real wallet balances inside Telegram or the Mini App."
     )
     safe_send(chat_id, text, reply_markup=markup)
 
@@ -558,7 +563,8 @@ def _mine_admin_overview_text():
         f"• Games Section: <b>{_mine_admin_value('games_section_enabled')}</b>\n"
         f"• Minimum Referrals To Play: <b>{_mine_admin_value('games_access_min_referrals')}</b>\n"
         f"• Mine Game: <b>{_mine_admin_value('mine_game_enabled')}</b>\n"
-        f"• Telegram Mode: <b>{_mine_admin_value('mine_telegram_enabled')}</b>\n\n"
+        f"• Telegram Mode: <b>{_mine_admin_value('mine_telegram_enabled')}</b>\n"
+        f"• Web App Mode: <b>{_mine_admin_value('mine_web_enabled')}</b>\n\n"
         f"<b>Outcome Engine</b>\n"
         f"• Win Ratio: <b>{_mine_admin_value('mine_global_win_rate')}%</b>\n"
         f"• Loss Ratio: <b>{_mine_admin_value('mine_global_loss_rate')}%</b>\n"
@@ -611,7 +617,7 @@ def mineadm_access(call):
         return
     safe_answer(call)
     keys = [
-        "games_section_enabled", "games_access_min_referrals", "mine_game_enabled", "mine_telegram_enabled",
+        "games_section_enabled", "games_access_min_referrals", "mine_game_enabled", "mine_telegram_enabled", "mine_web_enabled",
     ]
     safe_send(
         call.message.chat.id,
@@ -676,7 +682,7 @@ def mineadm_ui(call):
         return
     safe_answer(call)
     keys = [
-        "games_section_enabled", "mine_game_enabled", "mine_telegram_enabled",
+        "games_section_enabled", "mine_game_enabled", "mine_telegram_enabled", "mine_web_enabled",
         "mine_sound_effects_enabled", "mine_risk_indicator_enabled", "mine_auto_cash_out_enabled",
         "mine_force_safe_first_tile",
     ]

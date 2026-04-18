@@ -96,6 +96,7 @@ DEFAULT_SETTINGS = {
     "games_access_min_referrals": 2,
     "mine_game_enabled": True,
     "mine_telegram_enabled": True,
+    "mine_web_enabled": True,
     "mine_global_win_rate": 45,
     "mine_global_loss_rate": 55,
     "mine_force_win_all": False,
@@ -1657,8 +1658,17 @@ def credit_game_winnings(user_id, net_amount, gross_profit=0.0):
     )
     return True
 
-def get_public_mine_url():
-    return ""
+def get_public_mine_url(user_id=None):
+    base = normalize_public_base_url(PUBLIC_BASE_URL)
+    if not base:
+        return ""
+    url = f"{base}/mine"
+    if user_id is not None:
+        try:
+            url += f"?uid={safe_int(user_id)}"
+        except Exception:
+            pass
+    return url
 
 def get_consecutive_mine_stats(user_id, limit=20):
     rows = db_execute(
